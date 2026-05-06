@@ -1,0 +1,6 @@
+{
+  "name": "CEFRStation",
+  "description": "A comprehensive platform for CEFR language certification preparation, featuring authentication and learning modules.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
