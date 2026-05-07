@@ -224,40 +224,59 @@ const callbackHandler = async (req: any, res: any) => {
 app.get("/api/auth/telegram/callback", callbackHandler);
 app.get("/auth/telegram/callback", callbackHandler);
 
-// Checkout.uz Configuration
-const CHECKOUT_API_KEY = process.env.CHECKOUT_API_KEY;
-const CHECKOUT_API_URL = "https://checkout.uz/api/v1";
+// Octobank Configuration
+const OCTO_SHOP_ID = process.env.OCTO_SHOP_ID;
+const OCTO_API_KEY = process.env.OCTO_API_KEY;
+const OCTO_API_URL = "https://secure.octo.uz";
 
-// 3. Payment Creation (Checkout.uz)
+// 3. Payment Creation (Octobank)
 app.post("/api/payment/create", async (req, res) => {
   const { amount, orderId, description } = req.body;
 
-  if (!CHECKOUT_API_KEY) {
-    return res.status(500).json({ error: "CHECKOUT_API_KEY sozlanmagan." });
+  if (!OCTO_SHOP_ID || !OCTO_API_KEY) {
+    return res.status(500).json({ error: "OCTO_SHOP_ID yoki OCTO_API_KEY sozlanmagan." });
   }
 
   try {
-    const response = await axios.post(
-      `${CHECKOUT_API_URL}/payment/create`,
-      {
-        amount: amount || 5000000, // 50,000 UZS in tiyin (assumed 100 multiplier)
-        order_id: orderId || `order_${Date.now()}`,
-        description: description || "CEFRStation Pro obunasi",
-        success_url: `${APP_URL}/payment/success`,
-        failure_url: `${APP_URL}/payment/failure`,
-      },
-      {
-        headers: {
-          "X-Token": CHECKOUT_API_KEY,
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    const shopTransactionId = orderId || `order_${Date.now()}`;
+    const initTime = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
-    // Assuming response contains { id: '...', payment_url: '...' }
-    res.json(response.data);
+    const requestBody = {
+      octo_shop_id: OCTO_SHOP_ID,
+      octo_secret: OCTO_API_KEY,
+      shop_transaction_id: shopTransactionId,
+      auto_capture: true,
+      test: true,
+      init_time: initTime,
+      total_sum: amount || 5000000,
+      currency: 'UZS',
+      description: description || "CEFRStation Pro obunasi",
+      return_url: `${APP_URL}/payment/success`,
+      notify_url: `${APP_URL}/api/payment/notify`,
+      language: 'uz',
+      ttl: 15
+    };
+
+    const response = await axios.post(`${OCTO_API_URL}/prepare_payment`, requestBody, {
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    const result = response.data;
+
+    if (result.error !== 0) {
+      return res.status(400).json({ error: result.errMessage || "Payment creation failed" });
+    }
+
+    // Return compatible format
+    res.json({
+      id: result.data.octo_payment_UUID,
+      payment_url: result.data.octo_pay_url,
+      shop_transaction_id: shopTransactionId
+    });
   } catch (err: any) {
-    console.error("Checkout payment creation error:", err.response?.data || err.message);
+    console.error("Octobank payment creation error:", err.response?.data || err.message);
     res.status(500).json({ 
       error: "To'lov linkini yaratishda xatolik yuz berdi.",
       details: err.response?.data
